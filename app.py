@@ -25,11 +25,11 @@ with st.sidebar:
 
     # Filtre par Année
     # Vérifie que la colonne date est bien au format datetime
-    if not pd.api.types.is_datetime64_any_dtype(df['BUDA_CREE_DATE']):
-        df['BUDA_CREE_DATE'] = pd.to_datetime(df['BUDA_CREE_DATE'], errors='coerce')
+    if not pd.api.types.is_datetime64_any_dtype(df['BUAP_DATE_DEB']):
+        df['BUAP_DATE_DEB'] = pd.to_datetime(df['BUAP_DATE_DEB'], errors='coerce')
 
     # Extraction de l'année
-    df['ANNEE_CREE'] = df['BUDA_CREE_DATE'].dt.year
+    df['ANNEE_CREE'] = df['BUAP_DATE_DEB'].dt.year
 
     # Liste des années disponibles
     annees_disponibles = sorted(df['ANNEE_CREE'].dropna().unique())
@@ -104,5 +104,6 @@ with tab1:
 with tab2:
     st.header("🧮 Analyse détaillée")
     st.dataframe(df_filtered)
+
 
 
