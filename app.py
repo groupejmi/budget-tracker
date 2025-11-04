@@ -10,7 +10,7 @@ st.set_page_config(page_title=" Tableau de bord Budget", layout="wide")
 
 @st.cache_data
 def load_data():
-    file_path = r'budget_v2.csv'
+    file_path = r'budget_v2.Csv'
     data_set = pd.read_csv(file_path, sep=';', encoding='latin1')
     data = data_cleaning(data_set)
     return data
@@ -104,4 +104,5 @@ with tab1:
 with tab2:
     st.header("🧮 Analyse détaillée")
     st.dataframe(df_filtered)
+
 
