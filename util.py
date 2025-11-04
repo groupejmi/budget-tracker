@@ -13,6 +13,7 @@ columns = ["BUDA_SOC_CODE","BUAP_CODE","BUDA_CODE","FAMB_CODE",
            ]
 
 
+
 def data_cleaning(df):
     df = df[columns]
     col_date = ["BUDA_CREE_DATE", "BUAP_DATE_DEB","BUAP_CREE_DATE", "BUAP_DATE_FIN", "FBL_DATE_EMM", "FBL_DATE_LIV"]
@@ -187,9 +188,4 @@ def evolution_budget_alloue_engage(df):
         template='plotly_white'
     )
 
-
     st.plotly_chart(fig, use_container_width=True)
-
-
-
-
