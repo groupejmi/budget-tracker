@@ -53,7 +53,7 @@ def calculate_key_metrics(df):
     pourcentage_depassement = (depasses / nb_depassed * 100) if nb_depassed > 0 else 0
     
     # Montant total livré (engagé) — attention à la syntaxe
-    total_engage_df = df.groupby(['BUAP_FOUR_CODE', 'FBL_CODE'])['FBL_MONTANT_HT'].sum().reset_index()
+    total_engage_df = df.groupby(['BUAP_FOUR_CODE'])['FBL_MONTANT_HT'].sum().reset_index()
     total_engage = total_engage_df['FBL_MONTANT_HT'].sum()
     
     
@@ -189,3 +189,4 @@ def evolution_budget_alloue_engage(df):
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
