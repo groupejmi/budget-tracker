@@ -25,16 +25,11 @@ with st.sidebar:
 
     # Filtre par Année
     # Vérifie que la colonne date est bien au format datetime
-    #if not pd.api.types.is_datetime64_any_dtype(df['BUAP_CREE_DATE']):
-        #df['BUAP_CREE_DATE'] = pd.to_datetime(df['BUAP_CREE_DATE'], errors='coerce')
+    if not pd.api.types.is_datetime64_any_dtype(df['BUAP_CREE_DATE']):
+        df['BUAP_CREE_DATE'] = pd.to_datetime(df['BUAP_CREE_DATE'], errors='coerce')
 
     # Extraction de l'année
-    if 'BUAP_CREE_DATE' in df.columns:
-        df['ANNEE_CREE'] = pd.to_datetime(df['BUAP_CREE_DATE'], errors='coerce').dt.year
-    else:
-        st.error("⚠️ La colonne 'BUAP_CREE_DATE' est introuvable dans le fichier importé.")
-        st.write("Colonnes disponibles :", df.columns.tolist())
-        df['ANNEE_CREE'] = df['BUAP_CREE_DATE'].dt.year
+    df['ANNEE_CREE'] = df['BUAP_CREE_DATE'].dt.year
 
     # Liste des années disponibles
     annees_disponibles = sorted(df['ANNEE_CREE'].dropna().unique())
@@ -109,6 +104,7 @@ with tab1:
 with tab2:
     st.header("🧮 Analyse détaillée")
     st.dataframe(df_filtered)
+
 
 
 
