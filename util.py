@@ -110,7 +110,7 @@ def repartition_budget_par_famille_donut(df):
     
 def etat_budget_mensuel(df):
     # Préparation des données
-    df['ANNEE_MOIS'] = df['BUAP_DATE_DEB'].dt.to_period('M').astype(str)
+    df['ANNEE_MOIS'] = df['BUAP_CREE_DATE'].dt.to_period('M').astype(str)
 
     # Budget alloué (sans doublons BUAP_CODE)
     budget_alloue = df.drop_duplicates(subset='BUAP_CODE').groupby('ANNEE_MOIS')['BUAP_MONTANT'].sum().reset_index()
@@ -157,7 +157,7 @@ def evolution_budget_alloue_engage(df):
     df_copy = df.copy()
 
     # --- Ajout colonne ANNEE_MOIS ---
-    df_copy['ANNEE_MOIS'] = df_copy['BUAP_DATE_DEB'].dt.to_period('M').astype(str)
+    df_copy['ANNEE_MOIS'] = df_copy['BUAP_CREE_DATE'].dt.to_period('M').astype(str)
 
     # --- Budget alloué (sans doublons BUAP_CODE) ---
     budget_alloue = df_copy.drop_duplicates(subset='BUAP_CODE').groupby('ANNEE_MOIS')['BUAP_MONTANT'].sum().reset_index()
@@ -190,3 +190,4 @@ def evolution_budget_alloue_engage(df):
 
 
     st.plotly_chart(fig, use_container_width=True)
+
