@@ -6,7 +6,7 @@ import streamlit as st
 columns = ["BUDA_SOC_CODE","BUAP_CODE","BUDA_CODE","FAMB_CODE",
            "FAMB_LIBELLE","BUDA_LIBELLE","BUDA_CREE_PAR","BUDA_CREE_DATE",
            "BUAP_DATE_DEB","BUAP_DATE_FIN","BUAP_MONTANT","BUAP_FOUR_CODE",
-           "FBL_CODE","FBL_FOUR_RAISON","FBL_MONTANT_HT","BUDA_DEPASSEMENT",
+           "FBL_CODE","FBL_FOUR_RAISON","BUAP_CREE_DATE","FBL_MONTANT_HT","BUDA_DEPASSEMENT",
            "FBL_FCMD_CODE","FBL_DATE_EMM","FBL_DATE_LIV","FBL_FOUR_VILLE",
            "FBL_TAUX_CONV","FBL_FOUR_CP","FBL_DUREE_CREDIT",
            "FBL_RETOUR","FBL_ETAT","BUAP_AFFAIRE_CODE"
@@ -190,4 +190,5 @@ def evolution_budget_alloue_engage(df):
 
 
     st.plotly_chart(fig, use_container_width=True)
+
 
