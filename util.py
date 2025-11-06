@@ -351,7 +351,7 @@ def create_budget_evolution_figure(data, height=450):
     couleur_depense = '#1f77b4'
 
     figB = go.Figure()
-
+    #st.write(dfB)
     # Barres : Budget restant
     figB.add_trace(go.Bar(
         x=dfB['mois_label'],
@@ -476,12 +476,17 @@ def prepare_budget_summary(data):
     
     # --- Budget initial sans doublons ---
     df_budget_initial = (
-        df.drop_duplicates(subset=['BUDA_CODE','BUAP_CODE'])
-          .groupby(['BUDA_CODE','BUDA_LIBELLE','FAMB_CODE','FAMB_LIBELLE','BUAP_DATE_DEB','BUAP_DATE_FIN'], 
-                   as_index=False)['BUAP_MONTANT']
-          .sum()
-          .rename(columns={'BUAP_MONTANT':'Montant Initial'})
-    )
+    df.drop_duplicates(subset=['BUDA_CODE','BUAP_CODE'])
+      .groupby(['BUDA_CODE','BUDA_LIBELLE'], as_index=False)
+      .agg({
+          'FAMB_CODE':'first',
+          'FAMB_LIBELLE':'first',
+          'BUAP_DATE_DEB':'min',
+          'BUAP_DATE_FIN':'max',
+          'BUAP_MONTANT':'sum'
+      })
+      .rename(columns={'BUAP_MONTANT':'Montant Initial'})
+)
     
     # --- Dépenses par BUDA ---
     df_depenses = (
