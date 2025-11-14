@@ -120,6 +120,7 @@ def prepare_budget_data(df):
 
     # Budget global sans doublons
     budget_global = df.drop_duplicates(subset='BUAP_CODE')['BUAP_MONTANT'].sum()
+    df = df[df['FBL_DATE_EMM'].between(df['BUAP_DATE_DEB'], df['BUAP_DATE_FIN'])]
 
     # Extraire mois et limiter Mars → Février
     df['mois'] = df['FBL_DATE_EMM'].dt.month
@@ -320,6 +321,7 @@ def create_budget_evolution_figure(data, height=450):
 
     # Budget global sans doublons sur BUAP_CODE
     budget_global = df.drop_duplicates(subset='BUAP_CODE')['BUAP_MONTANT'].sum()
+    df = df[df['FBL_DATE_EMM'].between(df['BUAP_DATE_DEB'], df['BUAP_DATE_FIN'])]
 
     # Extraire mois et limiter à Mars->Février
     df['mois'] = df['FBL_DATE_EMM'].dt.month
@@ -423,53 +425,106 @@ def create_budget_evolution_figure(data, height=450):
         margin=dict(l=60, r=80, t=80, b=50)
     )
 
-    return figB
+    return figB, dfB
 
 
-def prepare_budget_table(data):
+
+
+def create_budget_summary_figure(data, height=250):
+    """
+    Crée une figure de synthèse annuelle du budget :
+    - Budget alloué (BUAP_MONTANT)
+    - Budget dépensé (FBL_MONTANT_HT)
+    pour chaque année budgétaire (Mars N → Février N+1).
+    """
+
     df = data.copy()
     
-    # Somme des dépenses par budget
-    df_budget = df.groupby(
-        ['BUDA_CODE', 'BUDA_LIBELLE', 'BUAP_CODE', 'BUAP_MONTANT', 
-         'FAMB_CODE', 'FAMB_LIBELLE'],
-        as_index=False
-    )['FBL_MONTANT_HT'].sum()
-    
-    df_budget.rename(columns={'FBL_MONTANT_HT':'Montant Dépensé', 
-                              'BUAP_MONTANT':'Montant Initial'}, inplace=True)
-    
-    df_budget['Solde'] = df_budget['Montant Initial'] - df_budget['Montant Dépensé']
-    df_budget['% Consommé'] = (df_budget['Montant Dépensé'] / df_budget['Montant Initial'] * 100).round(1)
-    
-    # Ligne total
-    total_row = pd.DataFrame({
-        'BUDA_CODE': ['Total'],
-        'BUDA_LIBELLE': [''],
-        'BUAP_CODE': [''],
-        'Montant Initial': [df_budget['Montant Initial'].sum()],
-        'FAMB_CODE': [''],
-        'FAMB_LIBELLE': ['Total Général'],
-        'Montant Dépensé': [df_budget['Montant Dépensé'].sum()],
-        'Solde': [df_budget['Solde'].sum()],
-        '% Consommé': [np.nan]
-    })
-    
-    df_final = pd.concat([df_budget, total_row], ignore_index=True)
-    
-    # Coloration du solde : fonction corrigée
-    def color_solde(val):
-        if pd.isna(val):
-            return ''  # pas de couleur si NaN
-        elif val == 0:
-            return 'background-color: red; color: white'
-        elif val < 0.2 * df_final['Montant Initial'].max():
-            return 'background-color: orange'
-        else:
-            return 'background-color: green; color: white'
-    
-    return df_final, color_solde
+    # --- Déterminer l'année budgétaire (Mars -> Février)
+    df['annee_budgetaire'] = df['FBL_DATE_EMM'].apply(
+        lambda d: d.year if pd.notnull(d) and d.month >= 3 else (d.year - 1 if pd.notnull(d) else None)
+    )
 
+    # --- Budget alloué par an (sans doublons sur BUAP_CODE)
+    budget_alloue = (
+        df.drop_duplicates(subset=['BUAP_CODE'])
+          .groupby('annee_budgetaire')['BUAP_MONTANT']
+          .sum()
+          .reset_index(name='Budget_alloué')
+    )
+
+    # --- Budget dépensé par an
+    budget_depense = (
+        df.groupby('annee_budgetaire')['FBL_MONTANT_HT']
+          .sum()
+          .reset_index(name='Budget_dépensé')
+    )
+
+    # --- Fusion des deux
+    df_summary = pd.merge(budget_alloue, budget_depense, on='annee_budgetaire', how='outer').fillna(0)
+
+    # --- Pourcentage de consommation
+    df_summary['%_consommation'] = (df_summary['Budget_dépensé'] / df_summary['Budget_alloué'] * 100).round(1)
+    df_summary = df_summary.sort_values('annee_budgetaire')
+
+    # --- Création du graphique
+    fig = go.Figure()
+
+    # Barres : Budget alloué
+    fig.add_trace(go.Bar(
+        x=df_summary['annee_budgetaire'].astype(str),
+        y=df_summary['Budget_alloué'],
+        name='Budget alloué',
+        marker_color='#2ca02c',
+        hovertemplate='<b>Année %{x}</b><br>Budget alloué : %{y:,.0f} €<extra></extra>'
+    ))
+
+    # Barres : Budget dépensé
+    fig.add_trace(go.Bar(
+        x=df_summary['annee_budgetaire'].astype(str),
+        y=df_summary['Budget_dépensé'],
+        name='Budget dépensé',
+        marker_color='#1f77b4',
+        hovertemplate='<b>Année %{x}</b><br>Budget dépensé : %{y:,.0f} €<extra></extra>'
+    ))
+
+    # Ligne du % de consommation
+    fig.add_trace(go.Scatter(
+        x=df_summary['annee_budgetaire'].astype(str),
+        y=df_summary['%_consommation'],
+        mode='lines+markers+text',
+        name='% consommation',
+        yaxis='y2',
+        line=dict(color='black', width=2),
+        marker=dict(size=7, color='black'),
+        text=[f"{p} %" for p in df_summary['%_consommation']],
+        textposition='top center',
+        hovertemplate='<b>Année %{x}</b><br>% consommé : %{y:.1f}%<extra></extra>'
+    ))
+
+    # --- Mise en page
+    fig.update_layout(
+        title=dict(
+            text="<b>Résumé annuel du budget</b>",
+            x=0.5, xanchor='center', font=dict(size=16)
+        ),
+        xaxis_title="Année budgétaire",
+        yaxis_title="Montant (€)",
+        yaxis2=dict(
+            overlaying='y',
+            side='right',
+            showgrid=False,
+            title="% consommation",
+            range=[0, max(110, df_summary['%_consommation'].max() + 10)]
+        ),
+        barmode='group',
+        template='plotly_white',
+        height=height,
+        legend=dict(orientation='h', y=-0.25, x=0.25, title_text=''),
+        margin=dict(l=60, r=80, t=80, b=50)
+    )
+
+    return fig
 
 def prepare_budget_summary(data):
     df = data.copy()
@@ -487,7 +542,8 @@ def prepare_budget_summary(data):
       })
       .rename(columns={'BUAP_MONTANT':'Montant Initial'})
 )
-    
+    df = df[df['FBL_DATE_EMM'].between(df['BUAP_DATE_DEB'], df['BUAP_DATE_FIN'])]
+
     # --- Dépenses par BUDA ---
     df_depenses = (
         df.groupby('BUDA_CODE', as_index=False)['FBL_MONTANT_HT']
@@ -514,6 +570,7 @@ def prepare_budget_summary(data):
     })
     
     df_summary = pd.concat([df_summary, total_row], ignore_index=True)
+    df_summary = df_summary[['BUDA_CODE', 'BUDA_LIBELLE', 'FAMB_LIBELLE', 'BUAP_DATE_DEB', 'BUAP_DATE_FIN', 'Montant Initial', 'Montant Dépensé', 'Solde']]
     return df_summary
 
 def display_budget_summary(df_summary):
@@ -543,3 +600,260 @@ def display_budget_summary(df_summary):
 # df_summary = prepare_budget_summary(data)
 # display_budget_summary(df_summary)
 
+import pandas as pd
+import plotly.graph_objects as go
+
+def create_budget_summary_figure1(df, height=450):
+    """
+    Résumé annuel du budget :
+    - Budget alloué : somme des BUAP_MONTANT sans doublon BUAP_CODE par année budgétaire
+    - Budget consommé : toutes les dépenses entre 01 mars N → 28 février N+1
+    - % consommation affiché sur la barre consommée
+    """
+
+    df = df.copy()
+
+    # Conversion des dates
+    for col in ['BUAP_DATE_DEB', 'BUAP_DATE_FIN', 'FBL_DATE_EMM']:
+        df[col] = pd.to_datetime(df[col], errors='coerce')
+
+    # Déterminer l'année budgétaire de chaque budget selon BUAP_DATE_DEB
+    df['annee_budgetaire'] = df['BUAP_DATE_DEB'].apply(lambda d: d.year if pd.notnull(d) else None)
+
+    summary_list = []
+
+    for annee in sorted(df['annee_budgetaire'].dropna().unique()):
+        # Budget alloué : sans doublons BUAP_CODE
+        mask_budget = df['annee_budgetaire'] == annee
+        budget_alloue = df.loc[mask_budget].drop_duplicates(subset='BUAP_CODE')['BUAP_MONTANT'].sum()
+
+        # Intervalle consommation : 01 mars N → 28 février N+1
+        start = pd.Timestamp(year=annee, month=3, day=1)
+        end = pd.Timestamp(year=annee + 1, month=2, day=28)
+
+        # Budget consommé : toutes les dépenses dans cet intervalle
+        budget_depense = df.loc[(df['FBL_DATE_EMM'] >= start) & (df['FBL_DATE_EMM'] <= end), 'FBL_MONTANT_HT'].sum()
+
+        pct_consommation = round((budget_depense / budget_alloue * 100), 1) if budget_alloue > 0 else 0
+
+        summary_list.append({
+            'annee_budgetaire': annee,
+            'Budget_alloué': budget_alloue,
+            'Budget_dépensé': budget_depense,
+            '%_consommation': pct_consommation
+        })
+
+    df_summary = pd.DataFrame(summary_list).sort_values('annee_budgetaire')
+
+    # --- Graphique Plotly ---
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=df_summary['annee_budgetaire'].astype(str),
+        y=df_summary['Budget_alloué'],
+        name='Budget alloué',
+        marker_color='#2ca02c',
+        hovertemplate='Année %{x}<br>Budget alloué : %{y:,.0f} €<extra></extra>'
+    ))
+
+    fig.add_trace(go.Bar(
+        x=df_summary['annee_budgetaire'].astype(str),
+        y=df_summary['Budget_dépensé'],
+        name='Budget consommé',
+        marker_color='#1f77b4',
+        text=[f"{p} %" for p in df_summary['%_consommation']],
+        textposition='outside',
+        hovertemplate='Année %{x}<br>Budget dépensé : %{y:,.0f} €<br>% consommé : %{text}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title=dict(
+            text="<b>Résumé annuel du budget (Mars → Février)</b>",
+            x=0.5, xanchor='center', font=dict(size=18)
+        ),
+        xaxis_title="Année budgétaire",
+        yaxis_title="Montant (€)",
+        barmode='group',
+        template='plotly_white',
+        height=height,
+        legend=dict(orientation='h', y=-0.25, x=0.25, title_text=''),
+        margin=dict(l=60, r=40, t=80, b=50)
+    )
+
+    return fig, df_summary
+
+
+def create_budget_evolution_figurealpha(data, height=450):
+    import calendar
+    import pandas as pd
+    import plotly.graph_objects as go
+
+    df = data.copy()
+    
+    # Conversion des dates
+    df['FBL_DATE_EMM'] = pd.to_datetime(df['FBL_DATE_EMM'], errors='coerce')
+    df['BUAP_DATE_DEB'] = pd.to_datetime(df['BUAP_DATE_DEB'], errors='coerce')
+    df['BUAP_DATE_FIN'] = pd.to_datetime(df['BUAP_DATE_FIN'], errors='coerce')
+
+    # --- Associer chaque dépense au budget correspondant ---
+    # On garde uniquement les dépenses entre BUAP_DATE_DEB et BUAP_DATE_FIN
+    df = df[df['FBL_DATE_EMM'].between(df['BUAP_DATE_DEB'], df['BUAP_DATE_FIN'])]
+
+    # Extraire le mois
+    df['mois'] = df['FBL_DATE_EMM'].dt.month
+
+    # Limiter aux mois Mars → Février
+    df = df[(df['mois'] >= 3) | (df['mois'] <= 2)]
+
+    # Dépenses par mois
+    depenses_mensuelles = (
+        df.groupby('mois')['FBL_MONTANT_HT']
+        .sum()
+        .reset_index()
+        .sort_values('mois')
+    )
+
+    # Ordre Mars → Février et labels
+    mois_ordre = [3,4,5,6,7,8,9,10,11,12,1,2]
+    mois_labels = [calendar.month_name[m][0:3].capitalize() for m in mois_ordre]
+    depenses_mensuelles = depenses_mensuelles.set_index('mois').reindex(mois_ordre).fillna(0).reset_index()
+    depenses_mensuelles['mois_label'] = mois_labels
+
+    # --- Calcul du budget restant correctement ---
+    # On somme les budgets correspondant aux dépenses filtrées
+    budgets_actifs = df.drop_duplicates(subset='BUAP_CODE')['BUAP_MONTANT'].sum()
+
+    dfB = depenses_mensuelles.copy()
+    dfB['cumul'] = dfB['FBL_MONTANT_HT'].cumsum()
+    dfB['budget_restant_B'] = (budgets_actifs - dfB['cumul']).clip(lower=0)
+    dfB['alerte'] = dfB['budget_restant_B'] == 0
+    dfB['%_consommation'] = (dfB['cumul'] / budgets_actifs * 100).round(1)
+
+    # Couleurs harmonisées
+    couleur_budget_restant = ['#FFB347' if not a else '#D62728' for a in dfB['alerte']]
+    couleur_depense = '#1f77b4'
+
+    # --- Graphique ---
+    figB = go.Figure()
+    
+    # Barres : Budget restant
+    figB.add_trace(go.Bar(
+        x=dfB['mois_label'],
+        y=dfB['budget_restant_B'],
+        name='Budget restant après le mois',
+        marker_color=couleur_budget_restant,
+        textposition='none',
+        hovertemplate='<b>%{x}</b><br>Solde du budget : %{y:,.0f} €<extra></extra>'
+    ))
+    
+    # Barres : Dépenses du mois
+    figB.add_trace(go.Bar(
+        x=dfB['mois_label'],
+        y=dfB['FBL_MONTANT_HT'],
+        name='Dépenses du mois',
+        marker_color=couleur_depense,
+        text=[f"{p:,.0f} €" for p in dfB['FBL_MONTANT_HT']],
+        textposition='outside',
+        hovertemplate='<b>%{x}</b><br>Dépense du mois : %{y:,.0f} €<extra></extra>'
+    ))
+
+    figB.update_layout(
+        title=dict(text="<b>Évolution mensuelle du budget</b>", x=0.5, xanchor='center', font=dict(size=16)),
+        xaxis_title="Mois",
+        yaxis_title="Montant (€)",
+        barmode='group',
+        template='plotly_white',
+        height=height,
+        legend=dict(orientation='h', y=-0.25, x=0.25, title_text=''),
+        margin=dict(l=60, r=40, t=80, b=50)
+    )
+
+    return figB
+
+
+
+def create_budget_repartition_conso(df, height=450):
+    """
+    Répartition du budget alloué et consommé par sous-famille budgétaire (BUDA_CODE)
+    - Budget alloué : somme unique des BUAP_MONTANT (sans doublons BUAP_CODE)
+    - Budget consommé : dépenses (FBL_MONTANT_HT) dont FBL_DATE_EMM ∈ [BUAP_DATE_DEB, BUAP_DATE_FIN]
+    """
+
+    df = df.copy()
+
+    # --- Préparation des dates ---
+    for col in ['BUAP_DATE_DEB', 'BUAP_DATE_FIN', 'FBL_DATE_EMM']:
+        df[col] = pd.to_datetime(df[col], errors='coerce')
+
+    # --- Budget alloué ---
+    df_unique = df.drop_duplicates(subset='BUAP_CODE')
+    df_alloue = (
+        df_unique.groupby('BUDA_CODE', as_index=False)['BUAP_MONTANT']
+        .sum()
+        .rename(columns={'BUAP_MONTANT': 'Budget_alloué'})
+    )
+
+    # --- Budget consommé ---
+    conso_list = []
+    for code in df_unique['BUDA_CODE'].dropna().unique():
+        total_conso = 0
+        sous_df = df_unique[df_unique['BUDA_CODE'] == code]
+
+        # Somme des dépenses correspondant aux périodes du budget
+        for _, row in sous_df.iterrows():
+            mask_dep = (
+                (df['BUDA_CODE'] == code)
+                & (df['FBL_DATE_EMM'] >= row['BUAP_DATE_DEB'])
+                & (df['FBL_DATE_EMM'] <= row['BUAP_DATE_FIN'])
+            )
+            total_conso += df.loc[mask_dep, 'FBL_MONTANT_HT'].sum()
+
+        conso_list.append({'BUDA_CODE': code, 'Budget_dépensé': total_conso})
+
+    df_conso = pd.DataFrame(conso_list)
+
+    # --- Fusion alloué + consommé ---
+    df_merge = pd.merge(df_alloue, df_conso, on='BUDA_CODE', how='outer').fillna(0)
+    df_merge = df_merge.sort_values('Budget_alloué', ascending=False)
+
+    # --- Diagramme en barres groupées ---
+    fig = go.Figure()
+
+    # Barres : Budget alloué
+    fig.add_trace(go.Bar(
+        x=df_merge['BUDA_CODE'],
+        y=df_merge['Budget_alloué'],
+        name='Budget alloué',
+        marker_color='#2ca02c',
+        hovertemplate='%{x}<br>Budget alloué : %{y:,.0f} €<extra></extra>'
+    ))
+
+    # Barres : Budget consommé
+    fig.add_trace(go.Bar(
+        x=df_merge['BUDA_CODE'],
+        y=df_merge['Budget_dépensé'],
+        name='Budget consommé',
+        marker_color='#1f77b4',
+        hovertemplate='%{x}<br>Budget consommé : %{y:,.0f} €<extra></extra>'
+    ))
+
+    # --- Mise en page ---
+    fig.update_layout(
+        title=dict(
+            text="<b>Répartition du budget par sous-famille budgétaire</b>",
+            x=0.5, xanchor='center', font=dict(size=17)
+        ),
+        xaxis_title="Sous-famille budgétaire (BUDA_CODE)",
+        yaxis_title="Montant (€)",
+        barmode='group',
+        bargap=0.25,
+        bargroupgap=0.15,
+        template='plotly_white',
+        height=height,
+        legend=dict(
+            orientation='h', y=-0.25, x=0.3, title_text=''
+        ),
+        margin=dict(l=50, r=40, t=70, b=50)
+    )
+
+    return fig, df_merge
